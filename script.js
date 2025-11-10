@@ -1,5 +1,52 @@
 
 (function(){
+  // ランダム再生用制御変数
+  let randomPlayActive = false;
+  let randomPlayTimeout = null;
+
+  function getAllPresetButtons() {
+    return Array.from(document.querySelectorAll('.preset-btn'));
+  }
+
+  function playRandomButtonSequentially() {
+    if (!randomPlayActive) return;
+    const btns = getAllPresetButtons();
+    if (!btns.length) return;
+    // ランダムで1つ選ぶ
+    const btn = btns[Math.floor(Math.random() * btns.length)];
+    // 再生終了時に次を再生
+    const onEnded = () => {
+      if (!randomPlayActive) return;
+      randomPlayTimeout = setTimeout(playRandomButtonSequentially, 500); // 0.5秒待って次
+    };
+    // 既存audioのonendedを上書き
+    const origPlayFromUrl = playFromUrl;
+    playFromUrl = function(src, label) {
+      stopAudioFile();
+      stopTTS();
+      try{
+        audio = new Audio(src);
+        audio.onplay = () => setStatus('音声ファイル再生中 (' + (label || '') + ')');
+        audio.onended = () => { setStatus('再生完了'); audio = null; onEnded(); };
+        audio.onerror = () => setStatus('音声の再生に失敗しました');
+        audio.play().catch(err => setStatus('再生エラー: ' + err.message));
+      }catch(e){ setStatus('オーディオ再生エラー: ' + e.message); }
+    };
+    playForButton(btn);
+    // playFromUrlを元に戻す
+    playFromUrl = origPlayFromUrl;
+  }
+
+  function stopRandomPlay() {
+    randomPlayActive = false;
+    if (randomPlayTimeout) {
+      clearTimeout(randomPlayTimeout);
+      randomPlayTimeout = null;
+    }
+    stopAudioFile();
+    stopTTS();
+    setStatus('ランダム再生を停止しました');
+  }
   // Per-button audio player with optional on-disk data-src support and TTS fallback
   const assignedMap = new Map(); // button -> {url, file}
   let audio = null;
@@ -126,6 +173,18 @@
     });
     // prevent clicks inside subgrid from closing when interacting
     document.querySelectorAll('.preset-subgrid').forEach(s => s.addEventListener('click', e => e.stopPropagation()));
+    // ランダム再生ボタン
+    const randomBtn = document.getElementById('randomPlayBtn');
+    const stopBtn = document.getElementById('randomStopBtn');
+    if (randomBtn && stopBtn) {
+      randomBtn.addEventListener('click', () => {
+        if (randomPlayActive) return;
+        randomPlayActive = true;
+        playRandomButtonSequentially();
+        setStatus('ランダム再生を開始しました');
+      });
+      stopBtn.addEventListener('click', stopRandomPlay);
+    }
     setStatus('準備完了');
   });
 
